@@ -10,16 +10,17 @@ from typing import Iterator
 from itertools import count
 import numpy as np
 
+
 class DataIterator(Iterable):
-  def __init__(self, data_iterator: Iterable = count(), meta_data:Iterable = count()):
-    self._data_iterator = data_iterator
-    self._meta_data = meta_data
+  def __init__(self, iterable: Iterable = count(),*, satellite_data: Iterable = count()):
+    self._iterable = iterable
+    self._satellite_data = satellite_data
 
   def __iter__(self) -> Iterator:
     '''if type(self._data_iterator) is DataIterator:
       return self.entry_point(self._data_iterator.__iter__()).__iter__()
     '''
-    data = self._data_iterator.__iter__()
+    data = self._iterable.__iter__()
     generator = self.loop_entry(data)
     return generator
 
@@ -35,9 +36,8 @@ class DataIterator(Iterable):
       else:
         yield self.entry_point(a)
 
-
   def __getattr__(self, attr):
-    return getattr(self._data_iterator, attr)
+    return getattr(self._iterable, attr)
 
   def __evaluate__(self):
     return [a for a in self.__iter__()]
@@ -48,25 +48,43 @@ class DataIterator(Iterable):
   def __len__(self):
     return len(self.__evaluate__())
 
+  def get_satellite_data(self):
+    return self._satellite_data
+
+  def __str__(self):
+    return str(self.__evaluate__())
+
 class SquaringAugmentor(DataIterator):
 
-  def entry_point(self, data) -> Iterator:
+  def entry_point(self, data) :
     return data ** 2
+
 
 class CubingAugmentor(DataIterator):
 
-  def entry_point(self, data) -> Iterator:
+  def entry_point(self, data) :
     return data ** 3
+
 
 class SqueezeAugmentor(DataIterator):
 
-  def entry_point(self, data) -> Iterator:
+  def entry_point(self, data):
     return [data]
+
 
 class NoiseAugmentor(DataIterator):
 
-  def entry_point(self, data) -> Iterator:
+  def entry_point(self, data) :
     return data ** np.random.rand()
+
+
+class ConstantAugmentor(DataIterator):
+  def __init__(self, iterable: Iterable = count(), *, satellite_data: Iterable = count(), constant=6):
+    super().__init__(iterable, satellite_data=satellite_data)
+    self._constant= constant
+
+  def entry_point(self, data):
+    return self._constant
 
 
 if __name__ == '__main__':
@@ -78,10 +96,13 @@ if __name__ == '__main__':
   expanded = SqueezeAugmentor(squared)
   cubed = CubingAugmentor(expanded)
   noised = NoiseAugmentor(cubed)
+  constants = ConstantAugmentor(noised,constant=23)
 
-  for a,o in zip(noised, data):
+  for a, o in zip(noised, data):
     print(a)
     print(o)
+
+  print(constants)
 
   print(noised[0][0])
 
