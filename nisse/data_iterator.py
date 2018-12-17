@@ -21,17 +21,19 @@ class DataIterator(Iterable):
     self._iterable = iterable
     self._satellite_data = satellite_data
     self._auto_inner_loop = auto_inner_loop
+    self._operations=[]
 
   def __iter__(self) -> Iterator:
-    '''if type(self._data_iterator) is DataIterator:
-      return self.entry_point(self._data_iterator.__iter__()).__iter__()
-    '''
     data = self._iterable.__iter__()
     generator = self.loop_entry(data)
     return generator
 
-  @abstractmethod
   def entry_point(self, data_iterator):
+    self._operations.append(self._entry_point)
+    return self._entry_point(data_iterator)
+
+  @abstractmethod
+  def _entry_point(self, data_iterator):
     raise NotImplemented
 
   def loop_entry(self, data_iterator: Iterable) -> Iterator:
@@ -66,7 +68,8 @@ class DataIterator(Iterable):
   def __len__(self):
     return len(self.as_list())
 
-  def get_satellite_data(self):
+  @property
+  def satellite_data(self):
     return self._satellite_data
 
   def __str__(self):
