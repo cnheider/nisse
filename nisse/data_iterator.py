@@ -7,6 +7,7 @@ from abc import abstractmethod
 from collections import Iterable
 from itertools import count
 from typing import Iterator
+from warg import NamedOrderedDictionary
 
 import numpy as np
 
@@ -15,7 +16,7 @@ class DataIterator(Iterable):
   def __init__(self,
                iterable: Iterable = count(),
                *,
-               satellite_data: Iterable = count(),
+               satellite_data: NamedOrderedDictionary = NamedOrderedDictionary(),
                auto_inner_loop=False,
                **kwargs):
     self._iterable = iterable
@@ -28,20 +29,21 @@ class DataIterator(Iterable):
     generator = self.loop_entry(data)
     return generator
 
-  def entry_point(self, data_iterator):
+  def entry_point(self, data_iterator, **kwargs):
     self._operations.append(self._entry_point)
-    return self._entry_point(data_iterator)
+    return self._entry_point(data_iterator,**kwargs)
 
   @abstractmethod
-  def _entry_point(self, data_iterator):
+  def _entry_point(self, data_iterator, **kwargs):
     raise NotImplemented
+
+  def _build(self, **kwargs):
+    if isinstance(self._iterable, DataIterator):
+      self._iterable._build(**kwargs)
 
   def loop_entry(self, data_iterator: Iterable) -> Iterator:
     for a in data_iterator:
       if self._auto_inner_loop:
-        #if isinstance(a, Image.Image):
-        #  yield self.entry_point(a)
-        #elif isinstance(a, Iterable):
         if isinstance(a, Iterable):
           gen = self.loop_entry(a)
           yield [b for b in gen]
@@ -51,7 +53,8 @@ class DataIterator(Iterable):
         yield self.entry_point(a)
 
   def __getattr__(self, attr):
-    return getattr(self._iterable, attr)
+    if hasattr(self._iterable, attr):
+      return getattr(self._iterable, attr)
 
   def as_list(self):
     return [a for a in self.__iter__()]
@@ -80,34 +83,34 @@ class DataIterator(Iterable):
 
 class SquaringAugmentor(DataIterator):
 
-  def entry_point(self, data) :
+  def _entry_point(self, data) :
     return data ** 2
 
 
 class CubingAugmentor(DataIterator):
 
-  def entry_point(self, data) :
+  def _entry_point(self, data) :
     return data ** 3
 
 
 class SqueezeAugmentor(DataIterator):
 
-  def entry_point(self, data):
+  def _entry_point(self, data):
     return [data]
 
 
 class NoiseAugmentor(DataIterator):
 
-  def entry_point(self, data) :
+  def _entry_point(self, data) :
     return data ** np.random.rand()
 
 
 class ConstantAugmentor(DataIterator):
-  def __init__(self, iterable: Iterable = count(), *, satellite_data: Iterable = count(), constant=6,**kwargs):
+  def __init__(self, iterable: Iterable = count(), *, satellite_data: NamedOrderedDictionary = NamedOrderedDictionary(), constant=6,**kwargs):
     super().__init__(iterable, satellite_data=satellite_data,**kwargs)
     self._constant= constant
 
-  def entry_point(self, data):
+  def _entry_point(self, data):
     return self._constant
 
 
@@ -132,4 +135,4 @@ if __name__ == '__main__':
 
   print(len(noised))
 
-  print(noised.size)
+  print(len(noised))
