@@ -23,13 +23,14 @@ class DataIterator(Iterable):
     self._satellite_data = satellite_data
     self._auto_inner_loop = auto_inner_loop
     self._operations=[]
+    self._kws = kwargs
 
   def __iter__(self) -> Iterator:
     data = self._iterable.__iter__()
     generator = self.loop_entry(data)
     return generator
 
-  def entry_point(self, data_iterator, **kwargs):
+  def entry_point(self, data_iterator,**kwargs):
     self._operations.append(self._entry_point)
     return self._entry_point(data_iterator,**kwargs)
 
@@ -37,20 +38,21 @@ class DataIterator(Iterable):
   def _entry_point(self, data_iterator, **kwargs):
     raise NotImplemented
 
-  def _build(self, **kwargs):
+  def build(self, **kwargs):
     if isinstance(self._iterable, DataIterator):
-      self._iterable._build(**kwargs)
+      self._iterable.build(**kwargs)
+      self._kws.update(kwargs)
 
   def loop_entry(self, data_iterator: Iterable) -> Iterator:
     for a in data_iterator:
       if self._auto_inner_loop:
         if isinstance(a, Iterable):
-          gen = self.loop_entry(a)
+          gen = self.loop_entry(a,**self._kws)
           yield [b for b in gen]
         else:
-          yield self.entry_point(a)
+          yield self.entry_point(a,**self._kws)
       else:
-        yield self.entry_point(a)
+        yield self.entry_point(a,**self._kws)
 
   def __getattr__(self, attr):
     if hasattr(self._iterable, attr):
