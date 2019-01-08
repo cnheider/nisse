@@ -1,140 +1,228 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import math
+from functools import reduce
 
 __author__ = 'cnheider'
 
 from abc import abstractmethod
 from collections import Iterable
 from itertools import count
-from typing import Iterator
-from warg import NamedOrderedDictionary
+from typing import Iterator, Sized, Tuple
+from warg import NamedOrderedDictionary as NOD
 
 import numpy as np
 
+class LazyPipeIterator(Iterable):
 
-class DataIterator(Iterable):
   def __init__(self,
-               iterable: Iterable = count(),
+               input=None,
                *,
-               satellite_data: NamedOrderedDictionary = NamedOrderedDictionary(),
-               auto_inner_loop=False,
+               satellite_data: NOD = NOD,
+               auto_eval=False,
                **kwargs):
-    self._iterable = iterable
+
+    if input is not None:
+      self._input = input
+
+      if isinstance(self._input, LazyPipeIterator):
+        self._parent = self._input
+
     self._satellite_data = satellite_data
-    self._auto_inner_loop = auto_inner_loop
-    self._operations=[]
-    self._kws = kwargs
+    self._auto_eval = auto_eval
 
   def __iter__(self) -> Iterator:
-    data = self._iterable.__iter__()
-    generator = self.loop_entry(data)
-    return generator
-
-  def entry_point(self, data_iterator,**kwargs):
-    self._operations.append(self._entry_point)
-    return self._entry_point(data_iterator,**kwargs)
-
-  @abstractmethod
-  def _entry_point(self, data_iterator, **kwargs):
-    raise NotImplemented
-
-  def build(self, **kwargs):
-    if isinstance(self._iterable, DataIterator):
-      self._iterable.build(**kwargs)
-      self._kws.update(kwargs)
-
-  def loop_entry(self, data_iterator: Iterable) -> Iterator:
-    for a in data_iterator:
-      if self._auto_inner_loop:
-        if isinstance(a, Iterable):
-          gen = self.loop_entry(a,**self._kws)
-          yield [b for b in gen]
-        else:
-          yield self.entry_point(a,**self._kws)
-      else:
-        yield self.entry_point(a,**self._kws)
-
-  def __getattr__(self, attr):
-    if hasattr(self._iterable, attr):
-      return getattr(self._iterable, attr)
-
-  def as_list(self):
-    return [a for a in self.__iter__()]
-
-  def as_dict(self):
-    return {k:v for k,v in self.__iter__()}
-
-  def __getitem__(self, index):
-    if isinstance(index,str):
-      return self.as_dict()[index]
-    else:
-      return self.as_list()[index]
+    return self.sample(set_name='training')
 
   def __len__(self):
-    return len(self.as_list())
+    if hasattr(self.root, '_input'):
+      if isinstance(self.root._input, Sized):
+        return len(self.root._input)
+    return 0
+
+  def __next__(self):
+    return self.sample()
+
+  def __call__(self, data, **kwargs):
+    return self.apply(data, **kwargs)
+
+  def __str__(self):
+    if self._auto_eval:
+      return str(self.eval())
+
+    if self._input is None:
+      return super().__str__()
+
+    return '\n'.join([super().__str__(), str(self._input)])
+
+  @property
+  def parent(self):
+    if hasattr(self, '_parent'):
+      return self._parent
+
+  @property
+  def root(self):
+    if hasattr(self, '_parent'):
+      if isinstance(self._parent, LazyPipeIterator):
+        return self._parent.root
+      else:
+        return self._parent
+    else:
+      return self
 
   @property
   def satellite_data(self):
     return self._satellite_data
 
-  def __str__(self):
-    return str(self.as_list())
+  #@abstractmethod
+  def func(self, data_iterator, *args, **kwargs):
+    return data_iterator
 
-  def __contains__(self, item):
-    return item in self.as_dict()
+  def _build(self, **kwargs):
+    return None
 
-class SquaringAugmentor(DataIterator):
+  def apply(self, data, **kwargs):
+    if self.parent is not None:
+      for data in self.parent.apply(data, **kwargs):
+        return self.func(data, **kwargs)
+    return self.func(data, **kwargs)
 
-  def _entry_point(self, data) :
+  def sample(self, **kwargs):
+    if self.parent is not None:
+      for data, info in self.parent.sample(**kwargs):
+        data = self.func(data, info=info, **kwargs)
+        yield NOD.dict_of(data, info)
+    else:
+      for data, info in self.random_sampler(**kwargs):
+        data = self.func(data, info=info, **kwargs)
+        yield NOD.dict_of(data, info)
+
+  def batch_sample(self, batch_size = 64 ,**kwargs):
+    s = []
+    for _ in range(batch_size):
+      s.append(self.sample(**kwargs).__next__())
+
+    return s
+
+  def random_sampler(self, **kwargs):
+    return self._input
+
+  def build(self, **kwargs):
+    if self.parent:
+      self.parent.build(**kwargs)
+    self._build(**kwargs)
+
+  @staticmethod
+  def compose(*pipeline, **kwargs):
+    return lambda x:reduce(lambda f, g:g(f, **kwargs), list(pipeline), x)
+
+  @staticmethod
+  def compile(*pipeline, **kwargs):
+    return reduce(lambda x, y:y(x, **kwargs), list(pipeline))
+
+  def eval(self, **kwargs):
+    return [a for a in self.sample(**kwargs)]
+
+
+class SquaringAugmentor(LazyPipeIterator):
+
+  def func(self, data, *args, **kwargs):
     return data ** 2
 
 
-class CubingAugmentor(DataIterator):
+class CubingAugmentor(LazyPipeIterator):
 
-  def _entry_point(self, data) :
+  def func(self, data, *args, **kwargs):
     return data ** 3
 
 
-class SqueezeAugmentor(DataIterator):
+class SqueezeAugmentor(LazyPipeIterator):
 
-  def _entry_point(self, data):
+  def func(self, data, *args, **kwargs):
     return [data]
 
 
-class NoiseAugmentor(DataIterator):
+class CountingAugmentor(LazyPipeIterator):
+  counter = count()
 
-  def _entry_point(self, data) :
-    return data ** np.random.rand()
+  def func(self, data, *args, **kwargs):
+    return data + self.counter.__next__()
 
 
-class ConstantAugmentor(DataIterator):
-  def __init__(self, iterable: Iterable = count(), *, satellite_data: NamedOrderedDictionary = NamedOrderedDictionary(), constant=6,**kwargs):
-    super().__init__(iterable, satellite_data=satellite_data,**kwargs)
-    self._constant= constant
+class NoiseAugmentor(LazyPipeIterator):
 
-  def _entry_point(self, data):
+  def func(self, data, *args, **kwargs):
+    return data + np.random.rand(*(data.shape))
+
+
+class ConstantAugmentor(LazyPipeIterator):
+  def __init__(self,
+               *args,
+               constant=6,
+               **kwargs):
+    super().__init__(*args, **kwargs)
+    self._constant = constant
+
+  def func(self, data, *args, **kwargs):
     return self._constant
 
 
 if __name__ == '__main__':
 
-  data = np.ones((4, 8))
+  def test1(data):
+
+    x = SquaringAugmentor(data)
+    x = CubingAugmentor(x)
+    x = NoiseAugmentor(x)
+
+    for i in x:
+      print(i)
+
+
+  def test2(data):
+    x = LazyPipeIterator.compose(SquaringAugmentor,
+                                 CubingAugmentor,
+                                 NoiseAugmentor)
+
+    for i in x(data):
+      print(i)
+
+
+  def test3(data):
+    x = LazyPipeIterator.compile(data,
+                                 SquaringAugmentor,
+                                 CubingAugmentor,
+                                 NoiseAugmentor)
+
+    for i in x:
+      print(i)
+
+
+  def test4(data):
+    data = NoiseAugmentor(CubingAugmentor(SquaringAugmentor(data)))
+
+    for i in data.sample(sess='sess'):
+      print(i)
+
+  def test5(data):
+    x = NoiseAugmentor(SquaringAugmentor(CubingAugmentor()))
+    a = x.apply(data)
+
+
+    for i in a:
+      print(i)
+
+  data = np.ones((2, 2))
   data += data
+  data2 = np.ones((5, 3))
+  data3 = np.ones((1, 4))
 
-  squared = SquaringAugmentor(data,auto_inner_loop=True)
-  expanded = SqueezeAugmentor(squared,auto_inner_loop=True)
-  cubed = CubingAugmentor(expanded,auto_inner_loop=True)
-  noised = NoiseAugmentor(cubed,auto_inner_loop=True)
-  constants = ConstantAugmentor(noised,constant=23,auto_inner_loop=True)
+  sample_dat = [(data, 'label_x', 2),
+                (data2, 'label_y'),
+                (data3, 'label_z',4)]
 
-  for a, o in zip(noised, data):
-    print(a)
-    print(o)
-
-  print(constants)
-
-  print(noised[0][0])
-
-  print(len(noised))
-
-  print(len(noised))
+  #test1(sample_dat)
+  #test2(sample_dat)
+  #test3(sample_dat)
+  #test4(sample_dat)
+  test5(data)
