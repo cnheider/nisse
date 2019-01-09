@@ -11,7 +11,13 @@ class NissePackage:
       'pytest',
       'mock'
       ]
-
+      
+  @property
+  def test_dependencies(self) -> list:
+    return [
+      'pytest-runner'
+      ]
+      
   @property
   def package_name(self) -> str:
     return 'Nisse'
