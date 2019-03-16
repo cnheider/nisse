@@ -1,3 +1,3 @@
-numpy
-six
-pytest
+numpy==1.16.2
+six==1.12.0
+pytest==4.3.1
