@@ -1,6 +1,11 @@
 from setuptools import find_packages
 
-from nisse.version import get_version
+import os
+import re
+
+with open(os.path.join(os.path.dirname(__file__), "nisse/version.py"), "r") as f:
+    # get version string from module
+    version = re.search(r"__version__ = ['\"]([^'\"]*)['\"]", f.read(), re.M).group(1)
 
 
 class NissePackage:
@@ -139,4 +144,4 @@ class NissePackage:
 
     @property
     def version(self):
-        return get_version()
+        return version
