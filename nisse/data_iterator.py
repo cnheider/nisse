@@ -9,7 +9,7 @@ from abc import abstractmethod
 from collections import Iterable
 from itertools import count
 from typing import Iterator, Sized, Tuple
-from warg import NamedOrderedDictionary as NOD
+from warg.named_ordered_dictionary import NOD as NOD
 
 import numpy as np
 
@@ -88,11 +88,11 @@ class LazyPipeIterator(Iterable):
         if self.parent is not None:
             for data, info in self.parent.sample(**kwargs):
                 data = self.func(data, info=info, **kwargs)
-                yield NOD.dict_of(data, info)
+                yield NOD.nod_of(data, info)
         else:
             for data, info in self.random_sampler(**kwargs):
                 data = self.func(data, info=info, **kwargs)
-                yield NOD.dict_of(data, info)
+                yield NOD.nod_of(data, info)
 
     def batch_sample(self, batch_size=64, **kwargs):
         s = []
