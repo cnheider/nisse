@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import math
 from functools import reduce
 
-__author__ = "cnheider"
+__author__ = "Christian Heider Nielsen"
 
-from abc import abstractmethod
 from collections import Iterable
 from itertools import count
-from typing import Iterator, Sized, Tuple
+from typing import Iterator, Sized
 from warg.named_ordered_dictionary import NOD as NOD
 
-import numpy as np
+import numpy
 
 
 class LazyPipeIterator(Iterable):
@@ -29,7 +27,7 @@ class LazyPipeIterator(Iterable):
         self._auto_eval = auto_eval
 
     def __iter__(self) -> Iterator:
-        return self.sample(set_name="training")
+        return self.sample()
 
     def __len__(self):
         if hasattr(self.root, "_input"):
@@ -86,11 +84,11 @@ class LazyPipeIterator(Iterable):
 
     def sample(self, **kwargs):
         if self.parent is not None:
-            for data, info in self.parent.sample(**kwargs):
+            for data, *info in self.parent.sample(**kwargs):
                 data = self.func(data, info=info, **kwargs)
                 yield NOD.nod_of(data, info)
         else:
-            for data, info in self.random_sampler(**kwargs):
+            for data, *info in self.sampler(**kwargs):
                 data = self.func(data, info=info, **kwargs)
                 yield NOD.nod_of(data, info)
 
@@ -101,7 +99,7 @@ class LazyPipeIterator(Iterable):
 
         return s
 
-    def random_sampler(self, **kwargs):
+    def sampler(self, **kwargs):
         return self._input
 
     def build(self, **kwargs):
@@ -145,7 +143,7 @@ class CountingAugmentor(LazyPipeIterator):
 
 class NoiseAugmentor(LazyPipeIterator):
     def func(self, data, *args, **kwargs):
-        return data + np.random.rand(*(data.shape))
+        return data + numpy.random.rand(*(data.shape))
 
 
 class ConstantAugmentor(LazyPipeIterator):
@@ -195,10 +193,10 @@ if __name__ == "__main__":
         for i in a:
             print(i)
 
-    data = np.ones((2, 2))
+    data = numpy.ones((2, 2))
     data += data
-    data2 = np.ones((5, 3))
-    data3 = np.ones((1, 4))
+    data2 = numpy.ones((5, 3))
+    data3 = numpy.ones((1, 4))
 
     sample_dat = [(data, "label_x", 2), (data2, "label_y"), (data3, "label_z", 4)]
 
